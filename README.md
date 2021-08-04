@@ -1,5 +1,5 @@
 - 第三方 yolov3 的 tensorflow 实现，包含训练和检测模块  
-https://yunyang1994.github.io/posts/YOLOv3
+https://github.com/YunYang1994/TensorFlow2.0-Examples/tree/master/4-Object_Detection/YOLOV3
 
 # 训练  
 
