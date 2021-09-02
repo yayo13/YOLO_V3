@@ -1,3 +1,7 @@
+'''
+使用权重模型（checkpoint）做前向推理
+需要定义模型结构
+'''
 import cv2
 import numpy as np
 from tqdm import tqdm
@@ -21,6 +25,13 @@ class yolo3_tf:
 
         self.model = tf.keras.Model(input_layer, bbox_tensors)
         self.model.load_weights(cfg.DETECT.WEIGHT_PATH)
+
+        ##### frozen model #####
+        # import onnx
+        # import tf2onnx
+        # # self.model.save('pb/yolov3.h5')
+        # model_onnx, _ = tf2onnx.convert.from_keras(self.model)
+        # onnx.save_model(model_onnx, 'pb/yolov3.onnx')
 
     def detect(self, np_img):
         image_size = np_img.shape[:2]

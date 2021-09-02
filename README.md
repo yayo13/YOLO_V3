@@ -37,4 +37,6 @@ tensorboard --logdir ./data/log 开启可视化
 
 1. 修改config.py内 __C.DETECT 相关的参数  
 
-2. python detect.py 开始检测
+2. python detect.py 开始检测  
+
+3. 或者将checkpoint固化为onnx模型，使用detect_onnx.py开始检测（不再需要tensorflow环境）
