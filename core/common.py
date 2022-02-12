@@ -27,6 +27,7 @@ class BatchNormalization(tf.keras.layers.BatchNormalization):
         return super().call(x, training)
 
 def convolutional(input_layer, filters_shape, downsample=False, activate=True, bn=True):
+    # input_layer=[B, H, W, C]
     if downsample:
         input_layer = tf.keras.layers.ZeroPadding2D(((1, 0), (1, 0)))(input_layer)
         padding = 'valid'

@@ -27,11 +27,11 @@ class yolo3_tf:
         self.model.load_weights(cfg.DETECT.WEIGHT_PATH)
 
         ##### frozen model #####
-        # import onnx
-        # import tf2onnx
-        # # self.model.save('pb/yolov3.h5')
-        # model_onnx, _ = tf2onnx.convert.from_keras(self.model)
-        # onnx.save_model(model_onnx, 'pb/yolov3.onnx')
+        import onnx
+        import tf2onnx
+        # self.model.save('pb/yolov3.h5')
+        model_onnx, _ = tf2onnx.convert.from_keras(self.model)
+        onnx.save_model(model_onnx, 'weights/yolov3.onnx')
 
     def detect(self, np_img):
         image_size = np_img.shape[:2]
@@ -62,7 +62,7 @@ class yolo3_tf:
 
 def main():
     detector = yolo3_tf()
-    detector.detect_batch()
+    # detector.detect_batch()
 
 if __name__ == '__main__':
     main()

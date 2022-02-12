@@ -61,7 +61,8 @@ __C.TEST.IOU_THRESHOLD        = 0.45
 # DETECT options
 __C.DETECT                    = edict()
 
-__C.DETECT.FILE_LIST          = "/media/yuan/文档/PROJECTS/CGS/1-AGV/DETOCTOR/YOLO_V1/VOCdevkit/VOC2019/image_list.txt"
+# __C.DETECT.FILE_LIST          = "/media/yuan/文档/PROJECTS/CGS/1-AGV/DETOCTOR/YOLO_V1/VOCdevkit/VOC2019/image_list.txt"
+__C.DETECT.FILE_LIST          = "/media/yuan/文档/PROJECTS/CGS/1-AGV/AGV_DEVIATE/params/imgfile.list"
 __C.DETECT.INPUT_SIZE         = 416
 __C.DETECT.WEIGHT_PATH        = "/media/yuan/文档/PROJECTS/CGS/1-AGV/DETOCTOR/YOLO_V3/weights/yolov3_agv"
 __C.DETECT.SCORE_THRESHOLD    = 0.33

@@ -41,6 +41,9 @@ class yolo3_onnx:
             image = cv2.imread(file_)
             image_rst = self.detect(image)
 
+            # cv2.imshow("detected", cv2.resize(image_rst,(0,0),fx=0.25,fy=0.25))
+            # cv2.waitKey(0)
+
             save_path = file_[:file_.rfind('.')]+'_drawed_v3_onnx.jpg'
             cv2.imwrite(save_path, image_rst)
 
