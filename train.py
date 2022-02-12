@@ -1,16 +1,3 @@
-#! /usr/bin/env python
-# coding=utf-8
-#================================================================
-#   Copyright (C) 2019 * Ltd. All rights reserved.
-#
-#   Editor      : VIM
-#   File name   : train.py
-#   Author      : YunYang1994
-#   Created date: 2019-07-18 09:18:54
-#   Description :
-#
-#================================================================
-
 import os
 import time
 import shutil
@@ -19,18 +6,23 @@ import tensorflow as tf
 import core.utils as utils
 from tqdm import tqdm
 from core.dataset import Dataset
-from core.yolov3 import YOLOv3, decode, compute_loss
+from core.yolov4 import YOLOv4, decode, compute_loss
 from core.config import cfg
 
 trainset = Dataset('train')
-logdir = "./data/log"
-steps_per_epoch = len(trainset)
-global_steps = tf.Variable(1, trainable=False, dtype=tf.int64)
-warmup_steps = cfg.TRAIN.WARMUP_EPOCHS * steps_per_epoch
-total_steps = cfg.TRAIN.EPOCHS * steps_per_epoch
+logdir   = "./data/log"
 
-input_tensor = tf.keras.layers.Input([416, 416, 3])
-conv_tensors = YOLOv3(input_tensor)
+steps_per_epoch      = len(trainset)
+global_steps         = tf.Variable(1, trainable=False, dtype=tf.int64)
+warmup_steps         = cfg.TRAIN.WARMUP_EPOCHS*steps_per_epoch
+first_stage_epoches  = cfg.TRAIN.FISRT_STAGE_EPOCHS
+second_stage_epoches = cfg.TRAIN.SECOND_STAGE_EPOCHS
+total_steps          = (first_stage_epoches + second_stage_epoches)*steps_per_epoch
+freeze_layers        = utils.load_freeze_layer()
+
+
+input_tensor = tf.keras.layers.Input([cfg.TRAIN.INPUT_SIZE, cfg.TRAIN.INPUT_SIZE, 3])
+conv_tensors = YOLOv4(input_tensor)
 
 output_tensors = []
 for i, conv_tensor in enumerate(conv_tensors):
@@ -39,7 +31,8 @@ for i, conv_tensor in enumerate(conv_tensors):
     output_tensors.append(pred_tensor)
 
 model = tf.keras.Model(input_tensor, output_tensors)
-model.load_weights("./weights/yolov3_agv")
+model.load_weights(cfg.TRAIN.WEIGHT_FILE)
+# utils.load_weights(model, cfg.TRAIN.WEIGHT_FILE)
 
 optimizer = tf.keras.optimizers.Adam()
 if os.path.exists(logdir): shutil.rmtree(logdir)
@@ -48,7 +41,7 @@ writer = tf.summary.create_file_writer(logdir)
 def train_step(image_data, target):
     with tf.GradientTape() as tape:
         pred_result = model(image_data, training=True)
-        giou_loss=conf_loss=prob_loss=0
+        giou_loss = conf_loss = prob_loss = 0
 
         # optimizing process
         for i in range(3):
@@ -62,18 +55,18 @@ def train_step(image_data, target):
 
         gradients = tape.gradient(total_loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        tf.print("=> STEP %4d   lr: %.6f   giou_loss: %4.2f   conf_loss: %4.2f   "
-                 "prob_loss: %4.2f   total_loss: %4.2f" %(global_steps, optimizer.lr.numpy(),
-                                                          giou_loss, conf_loss,
-                                                          prob_loss, total_loss))
+        tf.print("=> STEP: %4d/%4d lr: %.6f   giou_loss: %4.2f   conf_loss: %4.2f   "
+                 "prob_loss: %4.2f   total_loss: %4.2f" % (global_steps, total_steps, optimizer.lr.numpy(),
+                                                           giou_loss, conf_loss,
+                                                           prob_loss, total_loss))
+
         # update learning rate
         global_steps.assign_add(1)
         if global_steps < warmup_steps:
-            lr = global_steps / warmup_steps *cfg.TRAIN.LR_INIT
+            lr = global_steps / warmup_steps * cfg.TRAIN.LR_INIT
         else:
-            lr = cfg.TRAIN.LR_END + 0.5 * (cfg.TRAIN.LR_INIT - cfg.TRAIN.LR_END) * (
-                (1 + tf.cos((global_steps - warmup_steps) / (total_steps - warmup_steps) * np.pi))
-            )
+            lr = cfg.TRAIN.LR_END + 0.5*(cfg.TRAIN.LR_INIT - cfg.TRAIN.LR_END) * (
+                 (1+tf.cos((global_steps-warmup_steps) / (total_steps-warmup_steps) * np.pi)))
         optimizer.lr.assign(lr.numpy())
 
         # writing summary data
@@ -86,8 +79,20 @@ def train_step(image_data, target):
         writer.flush()
 
 
-for epoch in range(cfg.TRAIN.EPOCHS):
-    for image_data, target in trainset:
-        train_step(image_data, target)
-    model.save_weights("./weights/yolov3_agv2")
+isfreeze = False
+for epoch in range(first_stage_epoches + second_stage_epoches):
+    if epoch < first_stage_epoches:
+        if not isfreeze:
+            isfreeze = True
+            for lname in freeze_layers:
+                layer_freeze = model.get_layer(lname)
+                utils.freeze_all(layer_freeze)
+    elif isfreeze:
+        isfreeze = False
+        for lname in freeze_layers:
+            layer_freeze = model.get_layer(lname)
+            utils.unfreeze_all(layer_freeze)
 
+    for image_data , target in trainset:
+        train_step(image_data, target)
+    model.save_weights("./weights/yolov4")

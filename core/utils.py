@@ -1,31 +1,24 @@
 #! /usr/bin/env python
-# coding=utf-8
-#================================================================
-#   Copyright (C) 2019 * Ltd. All rights reserved.
-#
-#   Editor      : VIM
-#   File name   : utils.py
-#   Author      : YunYang1994
-#   Created date: 2019-07-12 01:33:38
-#   Description :
-#
-#================================================================
 
 import cv2
 import random
 import colorsys
 import numpy as np
 from core.config import cfg
+import tensorflow as tf
 
 def load_weights(model, weights_file):
     """
     I agree that this code is very ugly, but I don’t know any better way of doing it.
     """
+    layer_size = 110
+    output_pos = [93, 101, 109]
+
     wf = open(weights_file, 'rb')
     major, minor, revision, seen, _ = np.fromfile(wf, dtype=np.int32, count=5)
 
     j = 0
-    for i in range(75):
+    for i in range(layer_size):
         conv_layer_name = 'conv2d_%d' %i if i > 0 else 'conv2d'
         bn_layer_name = 'batch_normalization_%d' %j if j > 0 else 'batch_normalization'
 
@@ -34,7 +27,7 @@ def load_weights(model, weights_file):
         k_size = conv_layer.kernel_size[0]
         in_dim = conv_layer.input_shape[-1]
 
-        if i not in [58, 66, 74]:
+        if i not in output_pos:
             # darknet weights: [beta, gamma, mean, variance]
             bn_weights = np.fromfile(wf, dtype=np.float32, count=4 * filters)
             # tf weights: [gamma, beta, mean, variance]
@@ -51,7 +44,7 @@ def load_weights(model, weights_file):
         # tf shape (height, width, in_dim, out_dim)
         conv_weights = conv_weights.reshape(conv_shape).transpose([2, 3, 1, 0])
 
-        if i not in [58, 66, 74]:
+        if i not in output_pos:
             conv_layer.set_weights([conv_weights])
             bn_layer.set_weights(bn_weights)
         else:
@@ -157,6 +150,57 @@ def bboxes_iou(boxes1, boxes2):
     return ious
 
 
+def bbox_iou(boxes1, boxes2):
+
+    boxes1_area = boxes1[..., 2] * boxes1[..., 3]
+    boxes2_area = boxes2[..., 2] * boxes2[..., 3]
+
+    boxes1 = tf.concat([boxes1[..., :2] - boxes1[..., 2:] * 0.5,
+                        boxes1[..., :2] + boxes1[..., 2:] * 0.5], axis=-1)
+    boxes2 = tf.concat([boxes2[..., :2] - boxes2[..., 2:] * 0.5,
+                        boxes2[..., :2] + boxes2[..., 2:] * 0.5], axis=-1)
+
+    left_up = tf.maximum(boxes1[..., :2], boxes2[..., :2])
+    right_down = tf.minimum(boxes1[..., 2:], boxes2[..., 2:])
+
+    inter_section = tf.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+
+    return 1.0 * inter_area / union_area
+
+def bbox_giou(boxes1, boxes2):
+
+    boxes1 = tf.concat([boxes1[..., :2] - boxes1[..., 2:] * 0.5,
+                        boxes1[..., :2] + boxes1[..., 2:] * 0.5], axis=-1)
+    boxes2 = tf.concat([boxes2[..., :2] - boxes2[..., 2:] * 0.5,
+                        boxes2[..., :2] + boxes2[..., 2:] * 0.5], axis=-1)
+
+    boxes1 = tf.concat([tf.minimum(boxes1[..., :2], boxes1[..., 2:]),
+                        tf.maximum(boxes1[..., :2], boxes1[..., 2:])], axis=-1)
+    boxes2 = tf.concat([tf.minimum(boxes2[..., :2], boxes2[..., 2:]),
+                        tf.maximum(boxes2[..., :2], boxes2[..., 2:])], axis=-1)
+
+    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
+    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
+
+    left_up = tf.maximum(boxes1[..., :2], boxes2[..., :2])
+    right_down = tf.minimum(boxes1[..., 2:], boxes2[..., 2:])
+
+    inter_section = tf.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+    iou = inter_area / union_area
+
+    enclose_left_up = tf.minimum(boxes1[..., :2], boxes2[..., :2])
+    enclose_right_down = tf.maximum(boxes1[..., 2:], boxes2[..., 2:])
+    enclose = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
+    enclose_area = enclose[..., 0] * enclose[..., 1]
+    giou = iou - 1.0 * (enclose_area - union_area) / enclose_area
+
+    return giou
+
+
 def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
     """
     :param bboxes: (xmin, ymin, xmax, ymax, score, class)
@@ -237,5 +281,17 @@ def postprocess_boxes(pred_bbox, org_img_shape, input_size, score_threshold):
     return np.concatenate([coors, scores[:, np.newaxis], classes[:, np.newaxis]], axis=-1)
 
 
+def load_freeze_layer():
+    return ['conv2d_93', 'conv2d_101', 'conv2d_109']
 
+def freeze_all(model):
+    model.trainable = False
+    if isinstance(model, tf.keras.Model):
+        for l in model.layers:
+            freeze_all(l)
 
+def unfreeze_all(model):
+    model.trainable = True
+    if isinstance(model, tf.keras.Model):
+        for l in model.layers:
+            unfreeze_all(l)

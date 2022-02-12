@@ -8,15 +8,15 @@ from tqdm import tqdm
 import tensorflow as tf
 import core.utils as utils
 from core.config import cfg
-from core.yolov3 import YOLOv3, decode
+from core.yolov4 import YOLOv4, decode
 
-class yolo3_tf:
+class yolo4_tf:
     def __init__(self):
         self.build_model()
 
     def build_model(self):
         input_layer = tf.keras.layers.Input([cfg.DETECT.INPUT_SIZE, cfg.DETECT.INPUT_SIZE, 3])
-        output_layer = YOLOv3(input_layer)
+        output_layer = YOLOv4(input_layer)
 
         bbox_tensors = []
         for i, fm in enumerate(output_layer):
@@ -29,9 +29,9 @@ class yolo3_tf:
         ##### frozen model #####
         import onnx
         import tf2onnx
-        # self.model.save('pb/yolov3.h5')
+        # self.model.save('pb/yolov4.h5')
         model_onnx, _ = tf2onnx.convert.from_keras(self.model)
-        onnx.save_model(model_onnx, 'weights/yolov3.onnx')
+        onnx.save_model(model_onnx, 'weights/yolov4.onnx')
 
     def detect(self, np_img):
         image_size = np_img.shape[:2]
@@ -56,12 +56,12 @@ class yolo3_tf:
             image = cv2.imread(file_)
             image_rst = self.detect(image)
 
-            save_path = file_[:file_.rfind('.')]+'_drawed_v3.jpg'
+            save_path = file_[:file_.rfind('.')]+'_drawed_v4.jpg'
             cv2.imwrite(save_path, image_rst)
 
 
 def main():
-    detector = yolo3_tf()
+    detector = yolo4_tf()
     # detector.detect_batch()
 
 if __name__ == '__main__':
