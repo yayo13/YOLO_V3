@@ -31,8 +31,8 @@ for i, conv_tensor in enumerate(conv_tensors):
     output_tensors.append(pred_tensor)
 
 model = tf.keras.Model(input_tensor, output_tensors)
-model.load_weights(cfg.TRAIN.WEIGHT_FILE)
-# utils.load_weights(model, cfg.TRAIN.WEIGHT_FILE)
+# model.load_weights(cfg.TRAIN.WEIGHT_FILE)
+utils.load_weights(model, cfg.TRAIN.WEIGHT_FILE)
 
 optimizer = tf.keras.optimizers.Adam()
 if os.path.exists(logdir): shutil.rmtree(logdir)

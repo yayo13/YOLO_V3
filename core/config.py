@@ -22,7 +22,7 @@ __C.YOLO.IOU_LOSS_THRESH      = 0.6
 # Train options
 __C.TRAIN                     = edict()
 
-__C.TRAIN.WEIGHT_FILE         = "./weights/yolov4.weights"
+__C.TRAIN.WEIGHT_FILE         = "./weights/yolov4/yolov4.weights"
 __C.TRAIN.ANNOT_PATH          = "./data/dataset/agv_train.txt"
 __C.TRAIN.BATCH_SIZE          = 4
 __C.TRAIN.INPUT_SIZE          = 416

@@ -97,8 +97,8 @@ def image_preporcess(image, target_size, gt_boxes=None):
 def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_label=True):
     """
     bboxes: [x_min, y_min, x_max, y_max, probability, cls_id] format coordinates.
+            OR [x_min, y_min, x_max, y_max, cls_id]
     """
-
     num_classes = len(classes)
     image_h, image_w, _ = image.shape
     hsv_tuples = [(1.0 * x / num_classes, 1., 1.) for x in range(num_classes)]
@@ -112,8 +112,10 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
     for i, bbox in enumerate(bboxes):
         coor = np.array(bbox[:4], dtype=np.int32)
         fontScale = 2*0.5
-        score = bbox[4]
-        class_ind = int(bbox[5])
+        score = 0
+        if len(bbox) == 6:
+            score = bbox[4]
+        class_ind = int(bbox[-1])
         bbox_color = colors[class_ind]
         bbox_thick = int(0.6 * (image_h + image_w) / 600)
         c1, c2 = (coor[0], coor[1]), (coor[2], coor[3])
@@ -132,7 +134,7 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
 
 
 def bboxes_iou(boxes1, boxes2):
-
+    
     boxes1 = np.array(boxes1)
     boxes2 = np.array(boxes2)
 
@@ -151,7 +153,7 @@ def bboxes_iou(boxes1, boxes2):
 
 
 def bbox_iou(boxes1, boxes2):
-
+    
     boxes1_area = boxes1[..., 2] * boxes1[..., 3]
     boxes2_area = boxes2[..., 2] * boxes2[..., 3]
 
@@ -170,7 +172,7 @@ def bbox_iou(boxes1, boxes2):
     return 1.0 * inter_area / union_area
 
 def bbox_giou(boxes1, boxes2):
-
+    # cx, cy, w, h => xmin, ymin, xmax, ymax 
     boxes1 = tf.concat([boxes1[..., :2] - boxes1[..., 2:] * 0.5,
                         boxes1[..., :2] + boxes1[..., 2:] * 0.5], axis=-1)
     boxes2 = tf.concat([boxes2[..., :2] - boxes2[..., 2:] * 0.5,
@@ -200,6 +202,45 @@ def bbox_giou(boxes1, boxes2):
 
     return giou
 
+def bbox_diou(boxes1, boxes2):
+    distance_cxcy = boxes1[..., :2] - boxes2[..., :2]
+    distance_cc   = tf.pow(distance_cxcy[..., 0], 2) + tf.pow(distance_cxcy[..., 1], 2)
+
+    angle1 = tf.atan2(boxes1[..., 2], boxes1[..., 3])
+    angle2 = tf.atan2(boxes2[..., 2], boxes2[..., 3])
+    angle_d = 4/9.86959*tf.pow(angle1 - angle2, 2)
+
+    # cx, cy, w, h => xmin, ymin, xmax, ymax 
+    boxes1 = tf.concat([boxes1[..., :2] - boxes1[..., 2:] * 0.5,
+                        boxes1[..., :2] + boxes1[..., 2:] * 0.5], axis=-1)
+    boxes2 = tf.concat([boxes2[..., :2] - boxes2[..., 2:] * 0.5,
+                        boxes2[..., :2] + boxes2[..., 2:] * 0.5], axis=-1)
+
+    boxes1 = tf.concat([tf.minimum(boxes1[..., :2], boxes1[..., 2:]),
+                        tf.maximum(boxes1[..., :2], boxes1[..., 2:])], axis=-1)
+    boxes2 = tf.concat([tf.minimum(boxes2[..., :2], boxes2[..., 2:]),
+                        tf.maximum(boxes2[..., :2], boxes2[..., 2:])], axis=-1)
+
+    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
+    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
+
+    left_up = tf.maximum(boxes1[..., :2], boxes2[..., :2])
+    right_down = tf.minimum(boxes1[..., 2:], boxes2[..., 2:])
+
+    inter_section = tf.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+    iou = inter_area / union_area
+
+    enclose_left_up = tf.minimum(boxes1[..., :2], boxes2[..., :2])
+    enclose_right_down = tf.maximum(boxes1[..., 2:], boxes2[..., 2:])
+    enclose_diagonal = enclose_right_down - enclose_left_up
+    enclose_cc = tf.pow(enclose_diagonal[..., 0], 2) + tf.pow(enclose_diagonal[..., 1], 2)
+
+    ciou = iou - distance_cc/enclose_cc
+    diou = ciou - angle_d*(angle_d/((1-iou)+angle_d))
+    return diou
+    
 
 def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
     """

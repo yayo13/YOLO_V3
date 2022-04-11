@@ -123,7 +123,8 @@ def compute_loss(pred, conv, label, bboxes, i=0):
     respond_bbox  = label[:, :, :, :, 4:5]
     label_prob    = label[:, :, :, :, 5: ]
 
-    giou = tf.expand_dims(utils.bbox_giou(pred_xywh, label_xywh), axis=-1)
+    # giou = tf.expand_dims(utils.bbox_giou(pred_xywh, label_xywh), axis=-1)
+    giou = tf.expand_dims(utils.bbox_diou(pred_xywh, label_xywh), axis=-1)
     input_size = tf.cast(input_size, tf.float32)
 
     # small bbox should to increase the loss

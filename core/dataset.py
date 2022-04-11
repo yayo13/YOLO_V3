@@ -30,6 +30,8 @@ class Dataset(object):
         self.num_samples = len(self.annotations)
         self.num_batchs = int(np.ceil(self.num_samples / self.batch_size))
         self.batch_count = 0
+        self.mosaic_images = []
+        self.mosaic_bboxes = []
 
 
     def load_annotations(self, dataset_type):
@@ -89,7 +91,7 @@ class Dataset(object):
                 raise StopIteration
 
     def random_horizontal_flip(self, image, bboxes):
-
+        # 随机水平翻转
         if random.random() < 0.5:
             _, w, _ = image.shape
             image = image[:, ::-1, :]
@@ -98,7 +100,7 @@ class Dataset(object):
         return image, bboxes
 
     def random_crop(self, image, bboxes):
-
+        # 随机crop，保留所有label组成的最小包围框不被crop
         if random.random() < 0.5:
             h, w, _ = image.shape
             max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
@@ -121,7 +123,7 @@ class Dataset(object):
         return image, bboxes
 
     def random_translate(self, image, bboxes):
-
+        # 随机平移，所有label组成的最小包围框不被移出图像
         if random.random() < 0.5:
             h, w, _ = image.shape
             max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
@@ -142,6 +144,50 @@ class Dataset(object):
 
         return image, bboxes
 
+    def random_mosaic(self, image, bboxes):
+        '''
+        随机马赛克，一次拼接4张图像
+        需要注意每张图像尺寸不一致，每张图像的label数量不一致
+        image:  list [4] [H, W, C]
+        bboxes: list [4] [N, 5]
+        '''
+        if random.random() < 0.5:
+            h, w, _ = image[0].shape
+            split_x = int(random.uniform(300, w-300))
+            split_y = int(random.uniform(300, h-300))
+            
+            image_mosaic = np.zeros_like(image[0])
+            bboxes_mosaic = 0
+            for i in range(4):
+                h_, w_, _ = image[i].shape
+                crop_w = (-1)**(i%2)*(split_x+1) + i%2*w
+                crop_h = (-1)**(i//2)*(split_y+1) + i//2*h
+                crop_w = min(crop_w, w_)
+                crop_h = min(crop_h, h_)
+                crop_x = int(random.uniform(0, w_-crop_w-1))
+                crop_y = int(random.uniform(0, h_-crop_h-1))
+                mosaic_x = (i%2)*(split_x+1)
+                mosaic_y = (i//2)*(split_y+1)
+                image_mosaic[mosaic_y:mosaic_y+crop_h, mosaic_x:mosaic_x+crop_w] = image[i][crop_y:crop_y+crop_h, crop_x:crop_x+crop_w, :]
+
+                # make bboxes
+                bboxes_ = bboxes[i]
+                bbox_xy_min = np.maximum(bboxes_[:, [0,1]], [crop_x, crop_y])
+                bbox_xy_max = np.minimum(bboxes_[:, [2,3]], [crop_x+crop_w-1, crop_y+crop_h-1])
+                bbox_mask   = np.all(bbox_xy_max-bbox_xy_min > 0, axis=1)
+                bbox_mosaic = np.concatenate([bbox_xy_min[bbox_mask], bbox_xy_max[bbox_mask]], axis=-1)
+                if bbox_mosaic.shape[0] > 0:
+                    transport   = np.array([mosaic_x-crop_x, mosaic_y-crop_y]*2)
+                    bbox_mosaic = bbox_mosaic + transport
+                    bbox_label  = bboxes_[:, 4]
+                    bbox_mosaic = np.c_[bbox_mosaic, bbox_label[bbox_mask]]
+                    if isinstance(bboxes_mosaic, np.ndarray):
+                        bboxes_mosaic = np.r_[bboxes_mosaic, bbox_mosaic]
+                    else: bboxes_mosaic = bbox_mosaic
+            return image_mosaic, bboxes_mosaic
+        return image[0], bboxes[0]
+
+
     def parse_annotation(self, annotation):
 
         line = annotation.split()
@@ -155,6 +201,16 @@ class Dataset(object):
             image, bboxes = self.random_horizontal_flip(np.copy(image), np.copy(bboxes))
             image, bboxes = self.random_crop(np.copy(image), np.copy(bboxes))
             image, bboxes = self.random_translate(np.copy(image), np.copy(bboxes))
+
+            self.mosaic_images.append(image)
+            self.mosaic_bboxes.append(bboxes)
+            if len(self.mosaic_images) == 4:
+                image, bboxes = self.random_mosaic(self.mosaic_images, self.mosaic_bboxes)
+                # # test for mosaic
+                # test_mosaic = utils.draw_bbox(image, bboxes)
+                # cv2.imwrite("mosaic.jpg", test_mosaic)
+                self.mosaic_images = []
+                self.mosaic_bboxes = []
 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image, bboxes = utils.image_preporcess(np.copy(image), [self.train_input_size, self.train_input_size], np.copy(bboxes))
